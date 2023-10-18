@@ -26,7 +26,7 @@ int main(int argc, char *argv[]){
 	}
 	else{
 		char *parameter1 = argv[1];
-		char *input =argv[2];
+		char *input = argv[2];
 
         if(isFirstCharacterDigitOrLetter(input) && strcmp(argv[1], "1") == 0) {
            if (ip_valid(input)==1) 
