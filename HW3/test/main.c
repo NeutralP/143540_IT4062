@@ -3,215 +3,17 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "../lib/domain_ip.h"
+#include "../lib/sll.h"
+
+
+
+elementtype signinUser;
+
 int retry = 0;
 enum
 {
     ACTIVATION_CODE = 20200650
 };
-typedef struct
-{
-    char username[255];
-    char password[255];
-    int status;
-} elementtype;
-
-/*
-    Khai báo singly linked list
-*/
-/*
-    Singly linked list node
-*/
-typedef struct node node;
-typedef struct node
-{
-    elementtype element;
-    node *next;
-} node;
-
-/*
-    Singly linked list
-*/
-typedef struct singlyLinkedList
-{
-    node *root;
-    node *cur;
-    node *prev;
-    node *tail;
-} singlyLinkedList;
-
-/*
-    Hàm khởi tạo sll
-*/
-void createSinglyLinkedList(singlyLinkedList *list)
-{
-    list->root = list->prev = list->cur = list->tail = NULL;
-}
-
-/*
-    Hàm xóa sll
-*/
-void deleteSinglyList(singlyLinkedList *list)
-{
-    while (list->root != NULL)
-    {
-        node *current = list->root;
-        list->root = list->root->next;
-        free(current);
-    }
-}
-
-/*
-    Tạo node mới
-*/
-node *makeNewNode(elementtype e)
-{
-    node *new = (node *)malloc(sizeof(node));
-    if (new == NULL)
-    {
-        fprintf(stderr, "Memory allocation failed\n");
-        exit(EXIT_FAILURE);
-    }
-    new->element = e;
-    new->next = NULL;
-    return new;
-}
-
-/*
-    Thêm vào cuối sll
-*/
-void insertEnd(singlyLinkedList *list, elementtype e)
-{
-    node *new = makeNewNode(e);
-    if (list->root == NULL)
-    {
-        list->root = list->tail = new;
-    }
-    else
-    {
-        list->tail->next = new;
-        list->tail = new;
-    }
-}
-
-/*
-    Hiển thị ds
-*/
-void displaySinglyLinkedList(singlyLinkedList list)
-{
-    if (list.root == NULL)
-        return;
-    printf("\n-----------------------------------");
-    list.cur = list.root;
-    while (list.cur != NULL)
-    {
-        printf("\n%s %s %d", list.cur->element.username, list.cur->element.password, list.cur->element.status);
-        list.cur = list.cur->next;
-    }
-}
-
-singlyLinkedList list;
-elementtype signinUser;
-void writeFile(singlyLinkedList *list)
-{
-    // Write file using single linked list
-    FILE *fp;
-    fp = fopen("sample.txt", "w");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "Error opening file\n");
-        exit(EXIT_FAILURE);
-    }
-    list->cur = list->root;
-    while (list->cur != NULL)
-    {
-        fprintf(fp, "%s %s %d\n", list->cur->element.username, list->cur->element.password, list->cur->element.status);
-        list->cur = list->cur->next;
-    }
-    fclose(fp);
-}
-
-void readFile()
-{
-    // Read file using single linked list
-    if (list.root != NULL)
-    {
-        return;
-    }
-    FILE *fp;
-    elementtype tmp;
-    fp = fopen("sample.txt", "r");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "Error opening file\n");
-        exit(EXIT_FAILURE);
-    }
-    list.cur = list.root;
-    while (1)
-    {
-        int result = fscanf(fp, "%s %s %d", tmp.username, tmp.password, &tmp.status);
-
-        // Check if fscanf successfully read all three values
-        if (result == 3)
-        {
-            insertEnd(&list, tmp);
-        }
-        else
-            break;
-    }
-    fclose(fp);
-    // displaySinglyLinkedList(list);
-}
-
-node *searchUser(singlyLinkedList *list, const char *username, const char *password)
-{
-    // Search user and return the user if found, null otherwise
-    if (list == NULL || username == NULL || password == NULL)
-    {
-        // Input validation: Ensure list, username, and password are not NULL
-        return NULL;
-    }
-
-    node *current = list->root;
-
-    while (current != NULL)
-    {
-        if (strcmp(current->element.username, username) == 0 &&
-            strcmp(current->element.password, password) == 0)
-        {
-            // User found with matching username and password
-            return current;
-        }
-        current = current->next;
-    }
-
-    // User not found
-    return NULL;
-}
-
-node *searchUserByUsername(singlyLinkedList *list, const char *username)
-{
-    // Search user and return the user if found, null otherwise
-    if (list == NULL || username == NULL)
-    {
-        // Input validation: Ensure list, username, and password are not NULL
-        return NULL;
-    }
-
-    node *current = list->root;
-
-    while (current != NULL)
-    {
-        if (strcmp(current->element.username, username) == 0)
-        {
-            // User found with matching username and password
-            return current;
-        }
-        current = current->next;
-    }
-
-    // User not found
-    return NULL;
-}
 
 int isFirstCharacterDigitOrLetter(const char *str) {
     if (str == NULL || str[0] == '\0') {
@@ -255,6 +57,9 @@ void reg()
 
         printf("\nEnter your password: ");
         scanf("%s", reguser.password);
+        printf("\nEnter your homepage: ");
+        scanf("%s", reguser.homepage);
+
         reguser.status = 2;
         node *newNode = makeNewNode(reguser);
         printf("\nSuccessful registration. Activation required.\n");
@@ -263,7 +68,7 @@ void reg()
         // Append to EOF
         fp = fopen("sample.txt", "a");
         insertEnd(&list, reguser);
-        fprintf(fp, "\n%s %s %d", reguser.username, reguser.password, reguser.status);
+        fprintf(fp, "\n%s %s %d %s", reguser.username, reguser.password, reguser.status, reguser.homepage);
         fclose(fp);
     }
     else
@@ -358,6 +163,7 @@ void signin()
             {
                 printf("Hello %s", foundUser->element.username);
                 signinUser = foundUser->element;
+                return;
             }
             else if (foundUser->element.status == 0)
             {
@@ -482,22 +288,24 @@ void signout()
 }
 
 void homepageDomain() {
-    char input[255];
-    printf("\nInput domain name: ");
-    scanf("%s", input);
-    if(!isFirstCharacterDigitOrLetter(input)) {
-        get_ip(input);
+    if(strlen(signinUser.username) == 0) {
+        printf("\nSign in first!");
+        return;
+    }
+    if(!isFirstCharacterDigitOrLetter(signinUser.homepage)) {
+        get_ip(signinUser.homepage);
     }
     else 
-        printf("\nNot found information\n");
+        printf("\n%s not found information\n", signinUser.homepage);
 }
 
 void homepageIP() {
-    char input[255];
-    printf("\nInput IP: ");
-    scanf("%s", input);
-    if(isFirstCharacterDigitOrLetter(input) && ip_valid(input)) {
-        get_info_ip_address(input);
+    if(strlen(signinUser.username) == 0) {
+        printf("\nSign in first!");
+        return;
+    }
+    if(isFirstCharacterDigitOrLetter(signinUser.homepage) && ip_valid(signinUser.homepage)) {
+        get_info_ip_address(signinUser.homepage);
     }
     else
         printf("\nNot found information\n");
