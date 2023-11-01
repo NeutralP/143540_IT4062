@@ -181,15 +181,15 @@ int main(int argc, char const *argv[])
                         char received_alpha[1024];
                         char received_num[1024];
                         int a = breakPassword(buffer, received_alpha, received_num);
-                        if (a)
+                        if (a == 1)
                         {
                             printf("\nPassword is valid\n");
                             // Send response to client
                             printf("TO_CLIENT: Sending message to Client\n");
                             printf("TO_CLIENT: %s %s\n", received_alpha, received_num);
-                            send(new_socket, VALID_PASSWORD, strlen(VALID_PASSWORD), 0);
 
-                            printf("\nNew credentials: %s %s\n", p->element.username, buffer);
+                            send(new_socket, VALID_PASSWORD, strlen(VALID_PASSWORD), 0);
+                            printf("New credentials: %s %s\n", p->element.username, buffer);
                             strcpy(p->element.password, buffer);
                             writeFile(list);
 
@@ -207,7 +207,7 @@ int main(int argc, char const *argv[])
                             else
                                 send(new_socket, received_num, strlen(received_num), 0);
                         }
-                        else
+                        else if(a == 0)
                         {
                             printf("\nPassword is invalid\n");
                             send(new_socket, INVALID_PASSWORD, strlen(INVALID_PASSWORD), 0);
@@ -216,7 +216,7 @@ int main(int argc, char const *argv[])
                     break;
                 case 2:
                     printf("\nUser status is new.\n");
-                    send(new_socket, USER_NOT_ACTIVATED, strlen(USER_FOUND), 0);
+                    send(new_socket, USER_NOT_ACTIVATED, strlen(USER_NOT_ACTIVATED), 0);
                     break;
                 default:
                     break;

@@ -12,7 +12,7 @@ int breakPassword(char *buffer, char *only_string, char *only_number)
 	int j = 0;
 
 	// if number, copy to only_number
-	// if character, copy to only_string
+	// if character, copy to only_string (CAPITAL INCLUDED)
 	int m = 0;
 	for (int i = 0; i < 100; i++)
 	{
@@ -24,7 +24,7 @@ int breakPassword(char *buffer, char *only_string, char *only_number)
 			only_number[j] = ch;
 			j++;
 		}
-		else if ((ch >= 'a' && ch <= 'z'))
+		else if ((ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'))
 		{
 			only_string[k] = ch;
 			k++;

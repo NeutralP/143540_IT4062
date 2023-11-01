@@ -96,36 +96,38 @@ int main(int argc, char *argv[])
         {
             printf("\nWelcome back\n");
             memset(message, 0, sizeof(message));
-            do
+            while (1)
             {
                 printf("\nChange password:");
                 fgets(message, sizeof(message), stdin);
                 message[strcspn(message, "\n")] = '\0';
+                if (strcmp(message, "") == 0)
+                {
+                    printf("\nEmpty String!\n");
+                    continue;
+                }
+                send(sock, message, strlen(message), 0);
                 if (strcmp(message, "bye") == 0)
                 {
                     printf("\nGoodbye\n");
-                    send(sock, message, strlen(message), 0);
                     break;
                 }
                 else
                 {
-                    send(sock, message, strlen(message), 0);
-
                     memset(buffer, 0, sizeof(buffer));
                     recv(sock, buffer, sizeof(buffer), 0);
-                    printf("\n%s\n", buffer);
-                        send(sock, REQUEST_MSG, strlen(REQUEST_MSG), 0);
 
                     if (strcmp(buffer, VALID_PASSWORD) == 0)
                     {
+                        send(sock, REQUEST_MSG, strlen(REQUEST_MSG), 0);
                         memset(buffer, 0, sizeof(buffer));
                         recv(sock, buffer, sizeof(buffer), 0);
-                        if(strcmp(buffer, EMPTY_STRING) != 0)
+                        if (strcmp(buffer, EMPTY_STRING) != 0)
                             printf("\n%s", buffer);
                         send(sock, REQUEST_MSG, strlen(REQUEST_MSG), 0);
                         memset(buffer, 0, sizeof(buffer));
                         recv(sock, buffer, sizeof(buffer), 0);
-                        if(strcmp(buffer, EMPTY_STRING) != 0)
+                        if (strcmp(buffer, EMPTY_STRING) != 0)
                             printf("\n%s\n", buffer);
                     }
                     else if (strcmp(buffer, INVALID_PASSWORD) == 0)
@@ -133,7 +135,7 @@ int main(int argc, char *argv[])
                     else
                         printf("\n~YOU'VE DONE FUCKED UP!~");
                 }
-            } while (1);
+            }
             close(sock);
             return 0;
         }
