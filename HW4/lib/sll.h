@@ -6,10 +6,11 @@ typedef struct
     char username[255];
     char password[255];
     int status;
+    char homepage[255];
 } elementtype;
 
-/*
-    Singly linked list node
+/**
+ * Singly linked list node
 */
 typedef struct node node;
 typedef struct node
@@ -18,8 +19,8 @@ typedef struct node
     node *next;
 } node;
 
-/*
-    Singly linked list
+/**
+ * Singly linked list
 */
 typedef struct singlyLinkedList
 {
@@ -30,53 +31,58 @@ typedef struct singlyLinkedList
 } singlyLinkedList;
 
 /**
- *    Hàm khởi tạo sll
- */
+ * Hàm khởi tạo danh sách
+*/
 void createSinglyLinkedList(singlyLinkedList *list);
 
 /**
- *    Hàm xóa sll
- */
+ * Hàm xóa danh sách
+*/
 void deleteSinglyList(singlyLinkedList *list);
 
 /**
- *    Tạo node mới
- */
+ * Hàm tạo node mới
+*/
 node *makeNewNode(elementtype e);
 
 /**
- *    Thêm vào cuối sll
- */
+ * Hàm thêm node vào cuối danh sách
+*/
 void insertEnd(singlyLinkedList *list, elementtype e);
 
 /**
- *    Hiển thị ds
- */
-void displaySinglyLinkedList(singlyLinkedList list);
+ * Hàm hiển thị danh sách
+*/
+void displaySinglyLinkedList(singlyLinkedList *list);
 
 /**
- *  Viết vào file nguoidung.txt
- */
+ * Hàm viết file
+*/
 void writeFile(singlyLinkedList *list);
 
 /**
- *  Đọc file nguoidung.txt
- */
+ * Hàm đọc file
+*/
 void readFile(singlyLinkedList *list);
 
 /**
- *  Tìm kiếm người dùng có tài khoản và mật khẩu
- */
-node *searchUser(singlyLinkedList *list, const char *username, const char *password);
-
-/**
- *  Tìm kiếm người dùng chỉ cần tên tài khoản
- */
+ * Hàm tìm kiếm user theo username
+*/
 node *searchUserByUsername(singlyLinkedList *list, const char *username);
 
 /**
- * Split string to number and string
- */
-int split(char *buffer, char *only_number, char *only_string);
+ * Hàm tìm kiếm user theo username và password, return NULL nếu không tìm thấy
+*/
+node *searchUser(singlyLinkedList *list, const char *username, const char *password);
+
+/**
+ * Hàm in ra node cuối cùng
+*/
+void printEndNode(singlyLinkedList *list);
+
+/**
+ * Hàm in ra node hiện tại
+*/
+void printUser(node *e);
 
 #endif

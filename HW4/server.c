@@ -1,254 +1,208 @@
 #include <stdio.h>
-#include <strings.h>
-#include <sys/types.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <ctype.h>
 #include <stdlib.h>
-#include "./lib/sll.h"
-#define MAXLINE 1000
-#define BUFF_SIZE 1024
-#define SUCCESSFUL 1
-#define FALSE 2
-#define USER_BLOCKED 3
-#define USER_NOT_ACTIVATED 4
-#define CORRECT_PASSWORD 5
-#define PASSWORD_CHANGED 6
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include "lib/sll.h"
+#include "lib/util.h"
+#include "lib/handle_string.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char const *argv[])
 {
-	if (argc == 1)
-	{
-		printf("Please input port number\n");
-		return 0;
-	}
-	int serverSocket, clientSocket;
-	struct sockaddr_in serverAddr, clientAddr;
-	socklen_t clientAddrLen = sizeof(clientAddr);
-	char buffer[BUFF_SIZE];
-	char *port_number = argv[1];
-	int port = atoi(port_number);
-	ssize_t sentBytes, receivedBytes;
+    if (argc != 2)
+    {
+        printf("Usage: %s [PORT_NUMBER]\n", argv[0]);
+        return 1;
+    }
 
-	char only_string[BUFF_SIZE];
-	char only_number[BUFF_SIZE];
+    int sockfd, rcvBytes, sendBytes;
+    socklen_t len;
+    struct sockaddr_in servaddr, cliaddr;
+    char buffer[1024] = {0};
 
-	singlyLinkedList list;
-	createSinglyLinkedList(&list);
-	node *foundUser;
+    // Read file and create linked list of all users
+    singlyLinkedList *list = (singlyLinkedList *)malloc(sizeof(singlyLinkedList));
+    createSinglyLinkedList(list);
+    readFile(list);
+    displaySinglyLinkedList(list);
 
-	int loop = 0;
+    node *e = (node *)malloc(sizeof(node));
+    if ((e = searchUserByUsername(list, "hedspi23")) == NULL)
+    {
+        printf("\nsearchUserByUsername is behaving correctly");
+    }
 
-	readFile(&list);
+    if ((e = searchUser(list, "hedspi2", "WRONG")) == NULL)
+    {
+        printf("\nsearchUser is behaving correctly");
+    }
+    if ((e = searchUser(list, "sdfasdf", "hust1")) != NULL)
+    {
+        printUser(e);
+    }
+    else
+    {
+        printf("\nsearchUser is behaving correctly when input wrong password");
+    }
 
-	displaySinglyLinkedList(list);
+    printf("\nServer is ready. Waiting for a client...\n");
+    fflush(stdout);
 
-	// Create a UDP Socket
-	serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
-	if (serverSocket == -1)
-	{
-		perror("Socket creation failed");
-		exit(1);
-	}
-	// Initialize server address structure
-	memset(&serverAddr, 0, sizeof(serverAddr));
-	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serverAddr.sin_port = htons(port);
-	serverAddr.sin_family = AF_INET;
+    // Creating socket file descriptor
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == 0)
+    {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_port = htons(atoi(argv[1]));
 
-	// Bind the socket to the server address
-	if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
-	{
-		perror("Binding failed");
-		close(serverSocket);
-		exit(1);
-	}
+    // Forcefully attaching socket to the specified port
+    if (bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
+    {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
 
-	printf("\nUDP server is running on port %d...\n", port);
+    while (1)
+    {
+        len = sizeof(cliaddr);
+        memset(buffer, 0, sizeof(buffer)); // clear buffer
 
-	while (1)
-	{
-		foundUser = NULL;
-		loop = 0;
-		// Receive data from clients
-		receivedBytes = recvfrom(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
+        // Receive username from client
+        rcvBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+        buffer[rcvBytes] = '\0';
+        char tmp_username[1024];
+        strcpy(tmp_username, buffer);
+        printf("SERVER: Received username.\n");
 
-		if (receivedBytes == -1)
-		{
-			perror("Error receiving data");
-			close(serverSocket);
-			exit(1);
-		}
+        printf("TO_CLIENT: Requesting password..\n");
+        sendto(sockfd, REQUEST_PASSWORD, strlen(REQUEST_PASSWORD), 0, (struct sockaddr *)&cliaddr, len);
 
-		// Null-terminate the received data
-		buffer[receivedBytes] = '\0';
+        // Receive password from client
+        memset(buffer, 0, sizeof(buffer)); // clear buffer
+        rcvBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+        buffer[rcvBytes] = '\0';
 
-		printf("Received message from %s:%d: %s\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port), buffer);
-		fflush(stdout);
+        printf("SERVER: Received password.\n");
+        char tmp_password[1024];
+        strcpy(tmp_password, buffer);
+        printf("SERVER: Received username / password: %s %s\n", tmp_username, tmp_password);
 
-		foundUser = searchUserByUsername(&list, buffer);
-		/*
-			Check if the account name exists in database
-		*/
-		if (foundUser)
-		{
-			char *username = buffer;
-			printf("Username: %s\nPassword: %s", foundUser->element.username, foundUser->element.password);
-			fflush(stdout);
-			// If it does exist, send back a message to the client
-			strcpy(buffer, "1");
-			// Echo the message back to the client
-			sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+        node *p = (node *)malloc(sizeof(node));
 
-			// Receive password from client
-			receivedBytes = recvfrom(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
-			// Null-terminate the received data
-			buffer[receivedBytes] = '\0';
+        p = searchUserByUsername(list, tmp_username);
+        if (p == NULL)
+        {
+            printf("\nWrong password\n");
+            printf("Sending message to Client\n");
+            sendto(sockfd, USER_NOT_FOUND, strlen(USER_NOT_FOUND), 0, (struct sockaddr *)&cliaddr, len);
+            break;
+        }
 
-			char *password = buffer;
-			int result = strcmp(password, foundUser->element.password);
-			printf("\nPassword: %s %s %d\n", password, foundUser->element.password, result);
-			fflush(stdout);
-			// Check if password is correct
-			if (result == 0)
-			{
-				printf("Status: %d\n", foundUser->element.status);
-				printf("Username: %s\nPassword: %s\n", foundUser->element.username, foundUser->element.password);
-				fflush(stdout);
-				if (foundUser->element.status == 0)
-				{
-					printf("\nAccount is blocked.\n");
-					// Send the message back to client
-					strcpy(buffer, "3");
-					// Echo the message back to the client
-					sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-				}
-				// If account is not activated
-				else if (foundUser->element.status == 2)
-				{
-					printf("\nAccount is not activated.\n");
-					// Send the message back to client
-					strcpy(buffer, "4");
-					// Echo the message back to the client
-					sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-				}
-				// If account is activated
-				else if (foundUser->element.status == 1)
-				{
-					// If password is correct, send back a message to the client
-					strcpy(buffer, "5");
-					// Echo the message back to the client
-					sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-					// Change password till user input bye
-					while (1)
-					{
-						// Receive password from client
-						receivedBytes = recvfrom(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
-						// Null-terminate the received data
-						buffer[receivedBytes] = '\0';
-						if (strcmp(buffer, "bye") == 0)
-						{
-							break;
-						}
-						else
-						{
-							if (foundUser != NULL)
-							{
-								// Change password
-								strcpy(foundUser->element.password, buffer);
-								writeFile(&list);
-								// If password is correct, send back a message to the client
-								strcpy(buffer, "6");
-								// Echo the message back to the client
-								sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-							}
-							else
-							{
-								printf("Bug.\n");
-							}
-						}
-					}
-				}
-				loop = 1;
-			}
-			else if (loop == 0)
-			{
-				int n = 0;
-				while (n < 2)
-				{
-					// If password is incorrect, send back a message to the client and check
-					strcpy(buffer, "2");
-					printf("\nNumber of tries: %d\n", n + 1);
-					printf("Correct password: %s\n", foundUser->element.password);
-					// Echo the message back to the client
-					sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-					// Receive password from client
-					receivedBytes = recvfrom(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
-					// Null-terminate the received data
-					buffer[receivedBytes] = '\0';
-					if (strcmp(buffer, foundUser->element.password) == 0)
-					{
-						// If password is correct, send back a message to the client
-						strcpy(buffer, "1");
-						// Echo the message back to the client
-						sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-						break;
-					}
-					else
-					{
-						n++;
-					}
-				}
-				if (n == 2)
-				{
-					// If password is incorrect 3 times, send back a message to the client
-					strcpy(buffer, "3");
-					// Echo the message back to the client
-					sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-					// Change status of account to 0
-					if (foundUser != NULL)
-					{
-						printf("\nBlocking %s", foundUser->element.username);
-						foundUser->element.status = 0;
-						writeFile(&list);
-						printf("\nBlocked %s\n", foundUser->element.username);
-						// Send the message back to client
-						strcpy(buffer, "3");
-						// Echo the message back to the client
-						sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-					}
-					else
-					{
-						printf("Account not found.\n");
-					}
-				}
-			}
+        p = searchUser(list, tmp_username, tmp_password);
+        if (p == NULL)
+        {
+            int n = 0;
+            while ((p = searchUser(list, tmp_username, tmp_password)) == NULL && n++ < 2)
+            {
+                // Send message to client
+                printf("\nUser not found\n");
+                printf("Sending message to Client\n");
+                sendto(sockfd, INVALID_PASSWORD, strlen(INVALID_PASSWORD), 0, (struct sockaddr *)&cliaddr, len);
 
-			if (sentBytes == -1)
-			{
-				perror("Error sending data");
-				close(serverSocket);
-				exit(1);
-			}
-		}
-		else
-		{
-			strcpy(buffer, "2");
-		}
+                // Receive password from client
+                memset(buffer, 0, sizeof(buffer)); // clear buffer
+                rcvBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+                buffer[rcvBytes] = '\0'; // add '\0' after received
+                printf("SERVER: Received password: %s\n", buffer);
+                strcpy(tmp_password, buffer);
 
-		// Echo the message back to the client
-		sentBytes = sendto(serverSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+                printf("\n%d", n);
+            }
 
-		if (sentBytes == -1)
-		{
-			perror("Error sending data");
-			close(serverSocket);
-			exit(1);
-		}
-	}
+            printf("\n%d", n);
 
-	close(serverSocket);
-	return 0;
+            if (n > 2)
+            {
+                printf("\nTO_CLIENT: Sending message to Client\n");
+                sendto(sockfd, USER_BLOCKED, strlen(USER_BLOCKED), 0, (struct sockaddr *)&cliaddr, len);
+                e = searchUserByUsername(list, tmp_username);
+                e->element.status = 0;
+                writeFile(list);
+                break;
+            }
+        }
+        if (p != NULL)
+        {
+            switch (p->element.status)
+            {
+            case 0:
+                printf("\nCorrect credentials but user status is blocked.\n");
+                sendto(sockfd, USER_BLOCKED, strlen(USER_BLOCKED), 0, (struct sockaddr *)&cliaddr, len);
+                break;
+            case 1:
+                printf("\nUser status is active.\n");
+                sendto(sockfd, USER_FOUND, strlen(USER_FOUND), 0, (struct sockaddr *)&cliaddr, len);
+
+                while (1)
+                {
+                    // Receive new password from client
+                    memset(buffer, 0, sizeof(buffer));
+                    rcvBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+                    buffer[rcvBytes] = '\0';
+                    printf("\nCLIENT: Received message: %s\n", buffer);
+                    if (strcmp(buffer, "bye") == 0)
+                        break;
+                    char received_alpha[1024];
+                    char received_num[1024];
+                    int a = breakPassword(buffer, received_alpha, received_num);
+                    if (a == 1)
+                    {
+                        printf("\nPassword is valid\n");
+                        // Send response to client
+                        printf("TO_CLIENT: Sending message to Client\n");
+                        printf("TO_CLIENT: %s %s\n", received_alpha, received_num);
+
+                        sendBytes = sendto(sockfd, VALID_PASSWORD, strlen(VALID_PASSWORD), 0, (struct sockaddr *)&cliaddr, len);
+                        printf("New credentials: %s %s\n", p->element.username, buffer);
+                        strcpy(p->element.password, buffer);
+                        writeFile(list);
+
+                        memset(buffer, 0, sizeof(buffer));
+                        rcvBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+                        buffer[rcvBytes] = '\0';
+                        if (strlen(received_alpha) == 0)
+                            sendto(sockfd, EMPTY_STRING, strlen(EMPTY_STRING), 0, (struct sockaddr *)&cliaddr, len);
+                        else
+                            sendto(sockfd, received_alpha, strlen(received_alpha), 0, (struct sockaddr *)&cliaddr, len);
+
+                        memset(buffer, 0, sizeof(buffer));
+                        recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+                        if (strlen(received_num) == 0)
+                            sendto(sockfd, EMPTY_STRING, strlen(EMPTY_STRING), 0, (struct sockaddr *)&cliaddr, len);
+                        else
+                            sendto(sockfd, received_num, strlen(received_num), 0, (struct sockaddr *)&cliaddr, len);
+                    }
+                    else if (a == 0)
+                    {
+                        printf("\nPassword is invalid\n");
+                        sendto(sockfd, INVALID_PASSWORD, strlen(INVALID_PASSWORD), 0, (struct sockaddr *)&cliaddr, len);
+                    }
+                }
+                break;
+            case 2:
+                printf("\nUser status is new.\n");
+                sendto(sockfd, USER_NOT_ACTIVATED, strlen(USER_NOT_ACTIVATED), 0, (struct sockaddr *)&cliaddr, len);
+                break;
+            default:
+                break;
+            }
+            break;
+        }
+    }
+    return 0;
 }

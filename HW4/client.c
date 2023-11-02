@@ -1,230 +1,164 @@
-// udp client driver program
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <sys/socket.h>
-#include "./lib/sll.h"
-
-#define BUFF_SIZE 1024
+#include <stdbool.h>
+#include "lib/util.h"
 
 int main(int argc, char *argv[])
 {
-	// catch wrong input
-	if (argc != 3)
-	{
-		printf("Please input IP address and port number\n");
-		return 0;
-	}
-	char *ip_address = argv[1];
-	char *port_number = argv[2];
-	int port = atoi(port_number);
-	int clientSocket;
-	char buffer[BUFF_SIZE];
-	char message[BUFF_SIZE];
-	struct sockaddr_in serverAddr;
-	char INSERT_PASSWORD[] = "\nInsert password: ";
-	char OK[] = "\nOK\n";
-	char NOT_OK[] = "\nNot OK\n";
-	char ACCOUNT_IS_BLOCKED[] = "\nAccount is blocked\n";
-	char s5[] = "\nAccount not activated\n";
-	char ERROR_PROMPT[] = "\nError: Password includes special characters\n";
-	char END_KEY[] = "\nbye";
-	char END_MSG[] = "\nGoodbye hust\n";
-	char only_string[BUFF_SIZE];
-	char only_number[BUFF_SIZE];
-	ssize_t sentBytes, receivedBytes;
-	size_t len;
-	socklen_t serverAddrLen;
+    if (argc != 3)
+    {
+        printf("Usage: %s [SERVER_IP] [SERVER_PORT]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
 
-	// Create UDP socket
-	clientSocket = socket(AF_INET, SOCK_DGRAM, 0);
-	if (clientSocket == -1)
-	{
-		perror("Socket creation failed");
-		exit(1);
-	}
+    if (!is_valid_ip(argv[1]))
+    {
+        printf("Invalid server IP address: %s\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
 
-	// Initialize server address structure
-	memset(&serverAddr, 0, sizeof(serverAddr));
-	serverAddr.sin_addr.s_addr = inet_addr(ip_address);
-	serverAddr.sin_port = htons(port);
-	serverAddr.sin_family = AF_INET;
+    if (!is_valid_port(argv[2]))
+    {
+        printf("Invalid server port: %s\n", argv[2]);
+        exit(EXIT_FAILURE);
+    }
 
-	// connect to server
-	if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
-	{
-		printf("\n Error : Connect Failed \n");
-		exit(0);
-	}
+    char *server_ip = argv[1];
+    int server_port = atoi(argv[2]);
 
-	while (1)
-	{
-		memset(buffer, 0, BUFF_SIZE);
-		printf("Enter username: ");
-		fgets(buffer, BUFF_SIZE, stdin);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0)
+    {
+        perror("socket creation failed");
+        exit(EXIT_FAILURE);
+    }
 
-		/*
-			Exit code example
-		*/
-		// if (strcmp(buffer, "exit\n") == 0)
-		// {
-		// 	break; // Exit the loop
-		// }
+    struct sockaddr_in server_addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(server_port),
+    };
+    if (inet_pton(AF_INET, server_ip, &server_addr.sin_addr) <= 0)
+    {
+        perror("invalid address");
+        exit(EXIT_FAILURE);
+    }
 
-		// Remove the newline character
-		len = strlen(buffer);
-		if (len > 0 && buffer[len - 1] == '\n')
-		{
-			buffer[len - 1] = '\0';
-		}
+    socklen_t server_len = sizeof(server_addr);
+    char message[1024] = {0};
+    printf("Enter username: ");
+    fgets(message, sizeof(message), stdin);
+    message[strcspn(message, "\n")] = '\0'; // remove newline character
+    if (sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&server_addr, server_len) < 0)
+    {
+        perror("send failed");
+        exit(EXIT_FAILURE);
+    }
+    memset(message, 0, sizeof(message));
 
-		// Send the message to the server
-		sentBytes = sendto(clientSocket, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+    char buffer[1024] = {0};
+    while (true)
+    {
+        char message[1024] = {0};
 
-		if (sentBytes == -1)
-		{
-			perror("Error while sending data");
-			break;
-		}
+        // Receive message from server
+        memset(buffer, 0, sizeof(buffer));
+        if (recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_addr, &server_len) < 0)
+        {
+            perror("receive failed");
+            exit(EXIT_FAILURE);
+        }
+        printf("Server response: %s\n", buffer);
 
-		// printf("Sent message to the server: %s\n", buffer);
+        // Send response to server
+        memset(message, 0, sizeof(message));
+        if (strcmp(buffer, REQUEST_PASSWORD) == 0)
+        {
+            printf("\nEnter password: ");
+            fgets(message, sizeof(message), stdin);
+            message[strcspn(message, "\n")] = '\0';
+        }
+        else if (strcmp(buffer, USER_NOT_FOUND) == 0)
+        {
+            printf("\nUser not found\n");
+            close(sockfd);
+            return 0;
+        }
+        else if (strcmp(buffer, USER_FOUND) == 0)
+        {
+            printf("\nWelcome back\n");
+            memset(message, 0, sizeof(message));
+            while (1)
+            {
+                printf("\nChange password:");
+                fgets(message, sizeof(message), stdin);
+                message[strcspn(message, "\n")] = '\0';
+                if (strcmp(message, "") == 0)
+                {
+                    printf("\nEmpty String!\n");
+                    continue;
+                }
+                sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&server_addr, server_len);
+                if (strcmp(message, "bye") == 0)
+                {
+                    printf("\nGoodbye\n");
+                    break;
+                }
+                else
+                {
+                    memset(buffer, 0, sizeof(buffer));
+                    recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_addr, &server_len);
 
-		// Receive response from server
-		serverAddrLen = sizeof(serverAddr);
-		receivedBytes = recvfrom(clientSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&serverAddr, &serverAddrLen);
+                    if (strcmp(buffer, VALID_PASSWORD) == 0)
+                    {
+                        sendto(sockfd, REQUEST_MSG, strlen(REQUEST_MSG), 0, (struct sockaddr *)&server_addr, server_len);
+                        memset(buffer, 0, sizeof(buffer));
+                        recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_addr, &server_len);
+                        if (strcmp(buffer, EMPTY_STRING) != 0)
+                            printf("\n%s", buffer);
+                        sendto(sockfd, REQUEST_MSG, strlen(REQUEST_MSG), 0, (struct sockaddr *)&server_addr, server_len);
+                        memset(buffer, 0, sizeof(buffer));
+                        recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_addr, &server_len);
+                        if (strcmp(buffer, EMPTY_STRING) != 0)
+                            printf("\n%s\n", buffer);
+                    }
+                    else if (strcmp(buffer, INVALID_PASSWORD) == 0)
+                        printf("\nPassword invalid!");
+                    else
+                        printf("\n~YOU'VE DONE FUCKED UP!~");
+                }
+            }
+            close(sockfd);
+            return 0;
+        }
+        else if (strcmp(buffer, INVALID_PASSWORD) == 0)
+        {
+            printf("\nRe-enter password: ");
+            fgets(message, sizeof(message), stdin);
+            message[strcspn(message, "\n")] = '\0';
+        }
+        else if (strcmp(buffer, USER_NOT_ACTIVATED) == 0)
+        {
+            printf("\nAccount is not ready\n");
+            close(sockfd);
+            return 0;
+        }
+        else if (strcmp(buffer, USER_BLOCKED) == 0)
+        {
+            printf("\nAccount is blocked\n");
+            close(sockfd);
+            return 0;
+        }
+        if (sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&server_addr, server_len) < 0)
+        {
+            perror("send failed");
+            exit(EXIT_FAILURE);
+        }
+    }
 
-		if (receivedBytes == -1)
-		{
-			perror("Error receiving data");
-			close(clientSocket);
-			exit(1);
-		}
-
-		// Null-terminate the received data
-		buffer[receivedBytes] = '\0';
-		// Print received message
-		printf("1.Received message from the server: %s\n", buffer);
-
-		// If buffer returned 1 then ask for password else, keep looping
-		if (strcmp(buffer, "1") == 0)
-		{
-			while (1)
-			{
-				// Ask for password
-				printf("%s", INSERT_PASSWORD);
-				fgets(buffer, BUFF_SIZE, stdin);
-
-				// Remove the newline character
-				len = strlen(buffer);
-				if (len > 0 && buffer[len - 1] == '\n')
-				{
-					buffer[len - 1] = '\0';
-				}
-
-				// Send the message to the server
-				sentBytes = sendto(clientSocket, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-
-				if (sentBytes == -1)
-				{
-					perror("Error while sending data");
-					break;
-				}
-
-				// Receive response from server
-				serverAddrLen = sizeof(serverAddr);
-				receivedBytes = recvfrom(clientSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&serverAddr, &serverAddrLen);
-
-				if (receivedBytes == -1)
-				{
-					perror("Error receiving data");
-					close(clientSocket);
-					exit(1);
-				}
-
-				// Null-terminate the received data
-				buffer[receivedBytes] = '\0';
-				// Print received message
-				printf("2.Received message from the server: %s\n", buffer);
-
-				
-
-				// If received message is 5 then ask for new password
-				if (strcmp(buffer, "5") == 0)
-				{
-					while (1)
-					{
-						printf("\nHello user");
-						printf("\nInsert new password: (say bye to exit): ");
-						// Check if password inputted is correct format (no space, only numbers and alphabet characters), if correct then proceed if not then loop for new password
-						while (1)
-						{
-							fgets(buffer, BUFF_SIZE, stdin);
-							// Remove the newline character
-							len = strlen(buffer);
-							if (len > 0 && buffer[len - 1] == '\n')
-							{
-								buffer[len - 1] = '\0';
-							}
-							// Split string to number and string
-							int result = split(buffer, only_number, only_string);
-							// If result is 1 then password is correct format
-							if (result == 1)
-							{
-								break;
-							}
-							else
-							{
-								printf("%s", ERROR_PROMPT);
-							}
-						}
-
-
-
-
-						// Send the message to the server
-						sentBytes = sendto(clientSocket, buffer, strlen(buffer), 0, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-						if (sentBytes == -1)
-						{
-							perror("Error while sending data");
-							break;
-						}
-						if (strcmp(buffer, "bye") == 0)
-						{
-							printf("%s", END_MSG);
-							return 0;
-						}
-						// Receive response from server
-						serverAddrLen = sizeof(serverAddr);
-						receivedBytes = recvfrom(clientSocket, buffer, BUFF_SIZE, 0, (struct sockaddr *)&serverAddr, &serverAddrLen);
-						// Null-terminate the received data
-						buffer[receivedBytes] = '\0';
-						// Print received message
-						printf("3.Received message from the server: %s\n", buffer);
-					}
-					close(clientSocket);
-					return 0;
-				}
-				if (strcmp(buffer, "3") == 0) {
-					printf("%s", ACCOUNT_IS_BLOCKED);
-					close(clientSocket);
-					return 0;
-				}
-			}
-		}
-		else if (strcmp(buffer, "2") == 0)
-		{
-			printf("%s", NOT_OK);
-		}
-		else if (strcmp(buffer, "3") == 0)
-		{
-			printf("%s", ACCOUNT_IS_BLOCKED);
-		}
-	}
-	// Close the socket
-	close(clientSocket);
-
-	return 0;
+    close(sockfd);
+    return 0;
 }
